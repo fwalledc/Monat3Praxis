@@ -2,17 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Tests\Examples;
+namespace Tests\examples;
 
-use App\EmailServiceInterface;
-use App\LoggerInterface;
-use App\Order;
-use App\OrderService;
-use App\PaymentException;
-use App\PaymentGatewayInterface;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
+use Tests\examples\Newsletter\AuditLogInterface;
+use Tests\examples\Newsletter\MailerInterface;
+use Tests\examples\Newsletter\NewsletterService;
+use Tests\examples\Newsletter\SubscriberRepositoryInterface;
 
 /**
  * MOCK
@@ -29,53 +27,61 @@ use PHPUnit\Framework\TestCase;
 final class MockExampleTest extends TestCase
 {
     #[Test]
-    #[TestDox('Mock erwartet charge() genau 1x mit (99.99, EUR)')]
-    public function mockPrueftErwartungAutomatisch(): void
+    #[TestDox('Mock erwartet, dass genau 1x eine Willkommensmail rausgeht (once)')]
+    public function mockErwartetAufrufAutomatisch(): void
     {
-        $paymentMock = $this->createMock(PaymentGatewayInterface::class);
+        // Stub: liefert nur die Antwort, damit der Ablauf weiterlaeuft.
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('exists')->willReturn(false);
 
-        // ERWARTUNG (vor dem Akt): charge() muss genau 1x mit diesen
-        // Argumenten kommen. Tut es das nicht, scheitert der Test - auch
-        // ohne eigenes assert.
-        $paymentMock->expects($this->once())
-            ->method('charge')
-            ->with(99.99, 'EUR')
-            ->willReturn('TXN-MOCK');
+        // ERWARTUNG (vor dem Akt): sendWelcome() muss genau 1x mit dieser
+        // Adresse kommen. Tut es das nicht, scheitert der Test - auch ohne
+        // eigenes assert.
+        $mailerMock = $this->createMock(MailerInterface::class);
+        $mailerMock->expects($this->once())
+            ->method('sendWelcome')
+            ->with('neu@kunde.de');
 
-        // Auch eine Erwartung: die Bestaetigungsmail muss genau 1x raus.
-        $emailMock = $this->createMock(EmailServiceInterface::class);
-        $emailMock->expects($this->once())
-            ->method('sendOrderConfirmation')
-            ->with('kunde@test.de', 'ORDER-MOCK', 99.99);
+        $logStub = $this->createStub(AuditLogInterface::class);
+        $service = new NewsletterService($repositoryStub, $mailerMock, $logStub);
 
-        // Logger interessiert uns hier nicht -> Dummy/Stub reicht.
-        $logger = $this->createStub(LoggerInterface::class);
-
-        $service = new OrderService($paymentMock, $emailMock, $logger);
-        $order   = new Order('ORDER-MOCK', 'kunde@test.de', 99.99);
-
-        // Akt - die Pruefung passiert implizit beim Teardown durch PHPUnit.
-        $service->processOrder($order);
+        $service->subscribe('neu@kunde.de');
+        // Pruefung passiert implizit beim Teardown durch PHPUnit.
     }
 
     #[Test]
-    #[TestDox('Mock stellt sicher, dass bei Fehler KEINE Mail versendet wird (never)')]
+    #[TestDox('Mock stellt sicher: bei bekanntem Abo geht KEINE Mail raus (never)')]
     public function mockVerbietetUnerwuenschtenAufruf(): void
     {
-        $paymentMock = $this->createMock(PaymentGatewayInterface::class);
-        $paymentMock->method('charge')
-            ->willThrowException(new PaymentException('Abgelehnt'));
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('exists')->willReturn(true); // schon Abonnent
 
-        // ERWARTUNG: sendOrderConfirmation darf NIE aufgerufen werden.
-        $emailMock = $this->createMock(EmailServiceInterface::class);
-        $emailMock->expects($this->never())
-            ->method('sendOrderConfirmation');
+        // ERWARTUNG: sendWelcome darf NIE aufgerufen werden.
+        $mailerMock = $this->createMock(MailerInterface::class);
+        $mailerMock->expects($this->never())
+            ->method('sendWelcome');
 
-        $logger  = $this->createStub(LoggerInterface::class);
-        $service = new OrderService($paymentMock, $emailMock, $logger);
-        $order   = new Order('ORDER-FAIL', 'kunde@test.de', 50.00);
+        $logStub = $this->createStub(AuditLogInterface::class);
+        $service = new NewsletterService($repositoryStub, $mailerMock, $logStub);
 
-        $this->expectException(PaymentException::class);
-        $service->processOrder($order);
+        $service->subscribe('bekannt@kunde.de');
+    }
+
+    #[Test]
+    #[TestDox('Mock erwartet genau so viele send()-Aufrufe wie Empfaenger (exactly)')]
+    public function mockPrueftAufrufHaeufigkeit(): void
+    {
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('all')->willReturn(['a@x.de', 'b@x.de']);
+
+        // ERWARTUNG: send() muss genau 2x kommen - einmal pro Empfaenger.
+        $mailerMock = $this->createMock(MailerInterface::class);
+        $mailerMock->expects($this->exactly(2))
+            ->method('send');
+
+        $logStub = $this->createStub(AuditLogInterface::class);
+        $service = new NewsletterService($repositoryStub, $mailerMock, $logStub);
+
+        $service->sendCampaign('Newsletter 06/2026', 'Inhalt ...');
     }
 }

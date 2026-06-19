@@ -2,17 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Tests\Examples;
+namespace Tests\examples;
 
-use App\EmailServiceInterface;
-use App\LoggerInterface;
-use App\Order;
-use App\OrderService;
-use App\PaymentGatewayInterface;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
-use Tests\Examples\Fakes\SpyLogger;
+use Tests\examples\Newsletter\AuditLogInterface;
+use Tests\examples\Newsletter\Fakes\SpyAuditLog;
+use Tests\examples\Newsletter\MailerInterface;
+use Tests\examples\Newsletter\NewsletterService;
+use Tests\examples\Newsletter\SubscriberRepositoryInterface;
 
 /**
  * SPY
@@ -25,60 +24,58 @@ use Tests\Examples\Fakes\SpyLogger;
  *    nachschauen, was protokolliert wurde.
  *
  * Zwei Wege werden gezeigt:
- *   1) Selbstgebaute Spy-Klasse (SpyLogger) - das reine Prinzip.
+ *   1) Selbstgebaute Spy-Klasse (SpyAuditLog) - das reine Prinzip.
  *   2) PHPUnit-Mock + willReturnCallback - die Framework-Variante.
  */
 final class SpyExampleTest extends TestCase
 {
     #[Test]
-    #[TestDox('Selbstgebauter SpyLogger zeichnet alle Log-Meldungen auf')]
+    #[TestDox('Selbstgebauter SpyAuditLog zeichnet alle Log-Meldungen auf')]
     public function handgebauterSpyZeichnetAufrufeAuf(): void
     {
-        $spy = new SpyLogger();
+        $spy = new SpyAuditLog();
 
-        $payment = $this->createStub(PaymentGatewayInterface::class);
-        $payment->method('charge')->willReturn('TXN-SPY');
-        $email = $this->createStub(EmailServiceInterface::class);
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('exists')->willReturn(false);
+        $mailerStub = $this->createStub(MailerInterface::class);
 
-        $service = new OrderService($payment, $email, $spy);
-        $order   = new Order('ORDER-SPY', 'kunde@test.de', 42.00);
+        $service = new NewsletterService($repositoryStub, $mailerStub, $spy);
 
         // Akt
-        $service->processOrder($order);
+        $service->subscribe('neu@x.de');
 
         // ERST JETZT pruefen wir das aufgezeichnete Verhalten.
         $this->assertCount(2, $spy->infoMessages);
         $this->assertSame([], $spy->errorMessages);
-        $this->assertStringContainsString('Processing order: ORDER-SPY', $spy->infoMessages[0]);
-        $this->assertStringContainsString('successfully: ORDER-SPY', $spy->infoMessages[1]);
+        $this->assertStringContainsString('Subscribe attempt: neu@x.de', $spy->infoMessages[0]);
+        $this->assertStringContainsString('Subscribed successfully: neu@x.de', $spy->infoMessages[1]);
     }
 
     #[Test]
     #[TestDox('PHPUnit-Mock als Spy: Aufrufe per Callback sammeln und danach pruefen')]
     public function spyMitPhpunitCallback(): void
     {
-        $payment = $this->createStub(PaymentGatewayInterface::class);
-        $payment->method('charge')->willReturn('TXN-SPY2');
-        $email = $this->createStub(EmailServiceInterface::class);
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('exists')->willReturn(false);
+        $mailerStub = $this->createStub(MailerInterface::class);
 
-        $logger = $this->createMock(LoggerInterface::class);
+        $log = $this->createMock(AuditLogInterface::class);
 
         // Statt expects()->with(...) sammeln wir die Argumente selbst ein.
         $captured = [];
-        $logger->method('info')
+        $log->method('info')
             ->willReturnCallback(function (string $message) use (&$captured): void {
                 $captured[] = $message;
             });
 
-        $service = new OrderService($payment, $email, $logger);
-        $order   = new Order('ORDER-SPY2', 'kunde@test.de', 10.00);
+        $service = new NewsletterService($repositoryStub, $mailerStub, $log);
 
         // Akt
-        $service->processOrder($order);
+        $service->subscribe('neu2@x.de');
 
         // Pruefung im Nachhinein - wir entscheiden frei, was wir asserten.
         $this->assertCount(2, $captured);
-        $this->assertStringContainsString('Processing order', $captured[0]);
+        $this->assertStringContainsString('Subscribe attempt', $captured[0]);
         $this->assertStringContainsString('successfully', $captured[1]);
     }
 }

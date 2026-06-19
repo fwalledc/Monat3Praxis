@@ -2,16 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Tests\Examples;
+namespace Tests\examples;
 
-use App\EmailServiceInterface;
-use App\LoggerInterface;
-use App\Order;
-use App\OrderService;
-use App\PaymentGatewayInterface;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
+use Tests\examples\Newsletter\AuditLogInterface;
+use Tests\examples\Newsletter\MailerInterface;
+use Tests\examples\Newsletter\NewsletterService;
+use Tests\examples\Newsletter\SubscriberRepositoryInterface;
 
 /**
  * DUMMY
@@ -22,31 +21,29 @@ use PHPUnit\Framework\TestCase;
  *
  * Faustregel: "Ich brauche irgendein Objekt, damit der Code ueberhaupt
  * laeuft - was es tut, ist mir egal."
+ *
+ * (Demonstriert am neutralen NewsletterService, nicht am OrderService.)
  */
 final class DummyExampleTest extends TestCase
 {
     #[Test]
-    #[TestDox('Eine unbezahlte Bestellung wird storniert - Payment & Email sind reine Dummies')]
+    #[TestDox('Ungueltige Adresse bricht sofort ab - Repository & Mailer sind reine Dummies')]
     public function dummiesFuellenNurDieKonstruktorliste(): void
     {
-        // createStub() ohne jede Konfiguration -> reines Dummy-Objekt.
-        // Wir konfigurieren NICHTS, weil wir erwarten, dass es nie benutzt wird.
-        $paymentDummy = $this->createStub(PaymentGatewayInterface::class);
-        $emailDummy   = $this->createStub(EmailServiceInterface::class);
+        // createStub() ohne jede Konfiguration -> reine Dummy-Objekte.
+        // Bei ungueltiger E-Mail bricht subscribe() VOR Repository und
+        // Mailer ab, deshalb werden diese beiden nie benutzt.
+        $repositoryDummy = $this->createStub(SubscriberRepositoryInterface::class);
+        $mailerDummy     = $this->createStub(MailerInterface::class);
 
-        // Der Logger wird hier tatsaechlich benutzt (info), ist also KEIN Dummy.
-        $logger = $this->createStub(LoggerInterface::class);
+        // Der AuditLog wird tatsaechlich benutzt (info/error) -> kein Dummy.
+        $log = $this->createStub(AuditLogInterface::class);
 
-        $service = new OrderService($paymentDummy, $emailDummy, $logger);
+        $service = new NewsletterService($repositoryDummy, $mailerDummy, $log);
 
-        // Eine 'pending' Order loest keinen Refund und keine Mail aus.
-        $order = new Order('ORDER-DUMMY', 'kunde@test.de', 25.00);
+        $this->expectException(\InvalidArgumentException::class);
 
-        $result = $service->cancelOrder($order);
-
-        // Wir pruefen nur den Zustand (State Verification).
-        // Payment/Email mussten existieren, wurden aber nie angefasst.
-        $this->assertTrue($result);
-        $this->assertSame('cancelled', $order->getStatus());
+        // 'keine-adresse' enthaelt kein '@' -> Abbruch vor Repo/Mailer.
+        $service->subscribe('keine-adresse');
     }
 }

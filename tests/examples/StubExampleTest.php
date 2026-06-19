@@ -2,16 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Tests\Examples;
+namespace Tests\examples;
 
-use App\EmailServiceInterface;
-use App\LoggerInterface;
-use App\Order;
-use App\OrderService;
-use App\PaymentGatewayInterface;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
+use Tests\examples\Newsletter\AuditLogInterface;
+use Tests\examples\Newsletter\MailerInterface;
+use Tests\examples\Newsletter\NewsletterService;
+use Tests\examples\Newsletter\SubscriberRepositoryInterface;
 
 /**
  * STUB
@@ -27,49 +26,55 @@ use PHPUnit\Framework\TestCase;
 final class StubExampleTest extends TestCase
 {
     #[Test]
-    #[TestDox('Stub gibt eine feste Transaction-ID zurueck, damit der Ablauf testbar ist')]
+    #[TestDox('Stub meldet "Adresse existiert bereits" -> subscribe() liefert false')]
     public function stubLiefertFesteAntwort(): void
     {
-        // Stub: charge() gibt IMMER 'TXN-STUB' zurueck - egal mit welchen Argumenten.
-        $paymentStub = $this->createStub(PaymentGatewayInterface::class);
-        $paymentStub->method('charge')->willReturn('TXN-STUB');
+        // Stub: exists() gibt IMMER true zurueck.
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('exists')->willReturn(true);
 
-        $emailStub  = $this->createStub(EmailServiceInterface::class);
-        $loggerStub = $this->createStub(LoggerInterface::class);
+        $mailerStub = $this->createStub(MailerInterface::class);
+        $logStub    = $this->createStub(AuditLogInterface::class);
 
-        $service = new OrderService($paymentStub, $emailStub, $loggerStub);
-        $order   = new Order('ORDER-STUB', 'kunde@test.de', 99.99);
+        $service = new NewsletterService($repositoryStub, $mailerStub, $logStub);
 
-        $service->processOrder($order);
-
-        // Wir pruefen nur den resultierenden Zustand.
-        $this->assertSame('paid', $order->getStatus());
-        $this->assertSame('TXN-STUB', $order->getTransactionId());
+        // Wir pruefen nur das Ergebnis.
+        $this->assertFalse($service->subscribe('schon@da.de'));
     }
 
     #[Test]
-    #[TestDox('Stub kann je nach Argument unterschiedliche Werte liefern (willReturnMap)')]
+    #[TestDox('Stub liefert je nach Argument unterschiedliche Werte (willReturnMap)')]
     public function stubMitArgumentAbhaengigerAntwort(): void
     {
-        $paymentStub = $this->createStub(PaymentGatewayInterface::class);
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
 
-        // willReturnMap: [arg1, arg2, ..., returnValue]
-        $paymentStub->method('charge')->willReturnMap([
-            [10.00, 'EUR', 'TXN-CHEAP'],
-            [500.00, 'EUR', 'TXN-EXPENSIVE'],
+        // willReturnMap: [arg1, ..., returnValue]
+        $repositoryStub->method('exists')->willReturnMap([
+            ['bekannt@x.de', true],
+            ['neu@x.de', false],
         ]);
 
-        $emailStub  = $this->createStub(EmailServiceInterface::class);
-        $loggerStub = $this->createStub(LoggerInterface::class);
+        $mailerStub = $this->createStub(MailerInterface::class);
+        $logStub    = $this->createStub(AuditLogInterface::class);
 
-        $service = new OrderService($paymentStub, $emailStub, $loggerStub);
+        $service = new NewsletterService($repositoryStub, $mailerStub, $logStub);
 
-        $cheap = new Order('A', 'a@test.de', 10.00);
-        $service->processOrder($cheap);
-        $this->assertSame('TXN-CHEAP', $cheap->getTransactionId());
+        $this->assertFalse($service->subscribe('bekannt@x.de')); // existiert -> false
+        $this->assertTrue($service->subscribe('neu@x.de'));      // neu      -> true
+    }
 
-        $expensive = new Order('B', 'b@test.de', 500.00);
-        $service->processOrder($expensive);
-        $this->assertSame('TXN-EXPENSIVE', $expensive->getTransactionId());
+    #[Test]
+    #[TestDox('Stub liefert eine Empfaengerliste, damit sendCampaign() zaehlen kann')]
+    public function stubLiefertListe(): void
+    {
+        $repositoryStub = $this->createStub(SubscriberRepositoryInterface::class);
+        $repositoryStub->method('all')->willReturn(['a@x.de', 'b@x.de', 'c@x.de']);
+
+        $mailerStub = $this->createStub(MailerInterface::class);
+        $logStub    = $this->createStub(AuditLogInterface::class);
+
+        $service = new NewsletterService($repositoryStub, $mailerStub, $logStub);
+
+        $this->assertSame(3, $service->sendCampaign('Sommer-Sale', 'Bis zu 50%'));
     }
 }
