@@ -10,6 +10,10 @@
     <testsuites>
         <testsuite name="Monat 3 Praxis">
             <directory>tests</directory>
+            <exclude>tests/examples</exclude>
+        </testsuite>
+        <testsuite name="Examples">
+            <directory>tests/examples</directory>
         </testsuite>
     </testsuites>
     <source>
