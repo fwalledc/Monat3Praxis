@@ -2,3 +2,5 @@
 /loesung/
 /.idea/
 .phpunit.result.cache
+/CLAUDE.md
+/tests/OrderServiceSolutionTest.php
