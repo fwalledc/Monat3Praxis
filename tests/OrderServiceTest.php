@@ -11,6 +11,7 @@ use App\OrderService;
 use App\PaymentException;
 use App\PaymentGatewayInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -92,5 +93,80 @@ final class OrderServiceTest extends TestCase
     public function logsProcessingInfoInOrder(): void
     {
         $this->markTestIncomplete('Bonus-Test 6 noch schreiben');
+    }
+
+    // -------------------------------------------------------------------
+    // TEIL 3 - ZUSATZ (optional, weitere Techniken)
+    // -------------------------------------------------------------------
+
+    #[Test]
+    #[TestDox('Fehlgeschlagener Refund laesst die Order bezahlt und liefert false')]
+    public function refundFailureKeepsOrderPaid(): void
+    {
+        $this->markTestIncomplete('Zusatz-Test 7 noch schreiben');
+
+        // Order: status 'paid', transactionId gesetzt
+        // Mock: refund() -> willReturn(false)
+        // Mock: logger->error() once()
+        // Assert: cancelOrder() === false, Status bleibt 'paid'
+    }
+
+    #[Test]
+    #[TestDox('Exception traegt die erwartete Fehlermeldung')]
+    public function exposesPaymentErrorMessage(): void
+    {
+        $this->markTestIncomplete('Zusatz-Test 8 noch schreiben');
+
+        // Mock: charge() -> willThrowException(new PaymentException('Card declined'))
+        // expectException(PaymentException::class)
+        // expectExceptionMessage('Card declined')
+    }
+
+    /**
+     * @return array<string, array{float}>
+     */
+    public static function invalidAmountProvider(): array
+    {
+        return [
+            'null'    => [0.0],
+            'negativ' => [-5.0],
+        ];
+    }
+
+    #[Test]
+    #[TestDox('Ungueltige Betraege werden alle abgewiesen')]
+    #[DataProvider('invalidAmountProvider')]
+    public function rejectsEveryInvalidAmount(float $amount): void
+    {
+        $this->markTestIncomplete('Zusatz-Test 9 noch schreiben');
+
+        // Order mit $amount aus dem DataProvider
+        // Mock: charge() -> never()
+        // expectException(InvalidArgumentException::class)
+    }
+
+    #[Test]
+    #[TestDox('Argument-Matcher pruefen einzelne Parameter flexibel')]
+    public function verifiesArgumentsWithMatchers(): void
+    {
+        $this->markTestIncomplete('Zusatz-Test 10 noch schreiben');
+
+        // Mock: charge() -> willReturn('TXN-999')
+        // Mock: sendOrderConfirmation()->with(
+        //         $this->stringContains('@'),
+        //         $this->anything(),
+        //         $this->callback(fn (float $a) => $a > 0),
+        //       )
+    }
+
+    #[Test]
+    #[TestDox('Stub statt Mock, wenn der Rueckgabewert genuegt')]
+    public function usesStubWhenInteractionDoesNotMatter(): void
+    {
+        $this->markTestIncomplete('Zusatz-Test 11 noch schreiben');
+
+        // createStub() statt createMock() fuer alle drei Dependencies
+        // charge() -> willReturn('TXN-STUB')
+        // Assert nur den Zustand: Status 'paid', TransactionId gesetzt
     }
 }
